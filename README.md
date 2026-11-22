@@ -26,92 +26,78 @@ When every message is **keyed by `entityId`**, Kafka's partitioner hashes the ke
 
 ```mermaid
 flowchart TD
-    subgraph REST["🌐 REST API (port 8085)"]
-        DC["DemoController\n POST /demo/seed\n POST /demo/run\n POST /demo/run-all\n POST /demo/reset"]
-        VC["VerificationController\n GET /verify"]
+    subgraph REST["REST API - port 8085"]
+        DC["DemoController"]
+        VC["VerificationController"]
     end
 
-    subgraph Services["⚙️ Services"]
-        SS["SeederService\n generates 5,000 records\n at version=1"]
-        PS["OrderSyncPublishService\n runs version increment rounds\n v1 → v2 → v3 → v4 → v5"]
+    subgraph Services["Services"]
+        SS["SeederService"]
+        PS["OrderSyncPublishService"]
     end
 
-    subgraph Job["🕐 Scheduler"]
-        JOB["OrderSyncDiscoveryJob\n @Scheduled fixed-delay\n scheduler-enabled=false by default"]
+    subgraph Job["Scheduler"]
+        JOB["OrderSyncDiscoveryJob"]
     end
 
-    subgraph DB_A["🗄️ MySQL — Ground Truth"]
-        SD[("seed_data\n State A\n entityId · version · data")]
+    subgraph DB_A["MySQL - Ground Truth"]
+        SD[("seed_data")]
     end
 
     DC -->|seed| SS
-    DC -->|run / run-all| PS
-    SS -->|saveAll 5k records| SD
-    PS -->|reads + updates versions| SD
-    JOB -->|delegates to| PS
+    DC -->|run or run-all| PS
+    SS -->|save 5k records| SD
+    PS -->|increment versions| SD
+    JOB -->|delegate| PS
 
-    subgraph Producers["📤 Kafka Producers"]
-        NP["NaiveOrderSyncProducer\n key = null\n round-robin partition"]
-        OP["OrderedOrderSyncProducer\n key = entityId\n hash partition"]
+    subgraph Producers["Kafka Producers"]
+        NP["Naive producer<br/>Key: null"]
+        OP["Ordered producer<br/>Key: entityId"]
     end
 
-    PS -->|send| NP
-    PS -->|send| OP
+    PS --> NP
+    PS --> OP
 
-    subgraph KafkaBroker["☁️ Kafka Broker (localhost:9092)"]
-        subgraph T1["Topic: naviceOrderSync (3 partitions)"]
-            P0["Partition 0"]
-            P1["Partition 1"]
-            P2["Partition 2"]
+    subgraph KafkaBroker["Kafka Broker - localhost 9092"]
+        subgraph T1["naviceOrderSync - 3 partitions"]
+            NA["P0 P1 P2"]
         end
-        subgraph T2["Topic: orderSync (3 partitions)"]
-            P3["Partition 0\n entityId → always same partition"]
-            P4["Partition 1\n entityId → always same partition"]
-            P5["Partition 2\n entityId → always same partition"]
+        subgraph T2["orderSync - 3 partitions"]
+            OA["P0 P1 P2"]
         end
     end
 
-    NP -->|no key — any partition| P0
-    NP -->|no key — any partition| P1
-    NP -->|no key — any partition| P2
-    OP -->|hash(entityId)| P3
-    OP -->|hash(entityId)| P4
-    OP -->|hash(entityId)| P5
+    NP -->|round robin| NA
+    OP -->|hash by entityId| OA
 
-    subgraph NaiveConsumer["🔴 NaiveOrderSyncConsumer (concurrency=3)"]
-        direction TB
-        NC["AbstractOrderSyncConsumer\n deserialize JSON → OrderSyncMessage"]
-        NW["blindUpsert\n ON DUPLICATE KEY UPDATE\n no version check\n ⚠️ last writer wins"]
+    subgraph NaiveConsumer["Naive Consumer - concurrency 3"]
+        NC["Deserialize message"]
+        NW["Blind upsert<br/>Last writer wins"]
     end
 
-    subgraph OrderedConsumer["🟢 OrderedOrderSyncConsumer (concurrency=3)"]
-        direction TB
-        OC["AbstractOrderSyncConsumer\n deserialize JSON → OrderSyncMessage"]
-        OW["guardedUpsert\n ON DUPLICATE KEY UPDATE\n only if newVersion > stored\n ✅ always correct"]
+    subgraph OrderedConsumer["Ordered Consumer - concurrency 3"]
+        OC["Deserialize message"]
+        OW["Guarded upsert<br/>Only newer version"]
     end
 
-    P0 --> NC
-    P1 --> NC
-    P2 --> NC
-    P3 --> OC
-    P4 --> OC
-    P5 --> OC
+    NA --> NC
+    OA --> OC
 
     NC --> NW
     OC --> OW
 
-    subgraph DB_B["🗄️ MySQL — State B"]
-        NS[("naive_state\n ❌ corrupted\n older versions overwrite newer")]
+    subgraph DB_B["MySQL - State B"]
+        NS[("naive_state")]
     end
 
-    subgraph DB_C["🗄️ MySQL — State C"]
-        OS[("ordered_state\n ✅ correct\n always final version")]
+    subgraph DB_C["MySQL - State C"]
+        OS[("ordered_state")]
     end
 
-    NW -->|writes| NS
-    OW -->|writes| OS
+    NW --> NS
+    OW --> OS
 
-    VC -->|compare A vs B\ncompare A vs C| SD
+    VC -->|verify A against B and C| SD
     VC -->|reads| NS
     VC -->|reads| OS
 ```
@@ -122,7 +108,7 @@ flowchart TD
 
 ```mermaid
 classDiagram
-    class ProducerStrategy~T~ {
+    class ProducerStrategy {
         <<interface>>
         +send(topicName, payload)
     }
@@ -134,44 +120,42 @@ classDiagram
     class NaiveOrderSyncProducer {
         -KafkaTemplate kafkaTemplate
         +send(topicName, message)
-        note: key = null
+        keyIsNull
     }
 
     class OrderedOrderSyncProducer {
         -KafkaTemplate kafkaTemplate
         +send(topicName, message)
-        note: key = entityId
+        keyIsEntityId
     }
 
-    ProducerStrategy~T~ <|-- OrderSyncProducerStrategy
+    ProducerStrategy <|-- OrderSyncProducerStrategy
     OrderSyncProducerStrategy <|.. NaiveOrderSyncProducer
     OrderSyncProducerStrategy <|.. OrderedOrderSyncProducer
 
-    class AbstractKafkaConsumer~T~ {
+    class AbstractKafkaConsumer {
         #ObjectMapper objectMapper
-        #Class~T~ targetType
-        #consumeRaw(consumerName, rawJson, key, partition, offset)
-        #listen(groupId, rawJson, partition, offset, key)*
-        #process(consumerName, payload, key, partition, offset)*
+        #consumeRaw(rawJson, key, partition, offset)
+        #process(payload, key, partition, offset)
     }
 
     class AbstractOrderSyncConsumer {
-        note: T = OrderSyncMessage
+        payloadTypeIsOrderSyncMessage
     }
 
     class NaiveOrderSyncConsumer {
         -NaiveStateRepository repo
-        +listen() @KafkaListener naviceOrderSync
-        #process() blindUpsert → naive_state
+        +listen()
+        #process blindUpsert
     }
 
     class OrderedOrderSyncConsumer {
         -OrderedStateRepository repo
-        +listen() @KafkaListener orderSync
-        #process() guardedUpsert → ordered_state
+        +listen()
+        #process guardedUpsert
     }
 
-    AbstractKafkaConsumer~T~ <|-- AbstractOrderSyncConsumer
+    AbstractKafkaConsumer <|-- AbstractOrderSyncConsumer
     AbstractOrderSyncConsumer <|-- NaiveOrderSyncConsumer
     AbstractOrderSyncConsumer <|-- OrderedOrderSyncConsumer
 
@@ -243,31 +227,31 @@ classDiagram
 ```mermaid
 erDiagram
     seed_data {
-        varchar entityId PK
-        bigint  version
-        varchar eventType
-        text    data
-        timestamp updatedAt
+        VARCHAR entityId PK
+        BIGINT version
+        VARCHAR eventType
+        TEXT data
+        TIMESTAMP updatedAt
     }
 
     naive_state {
-        varchar entityId PK
-        bigint  version
-        varchar eventType
-        text    data
-        timestamp updatedAt
+        VARCHAR entityId PK
+        BIGINT version
+        VARCHAR eventType
+        TEXT data
+        TIMESTAMP updatedAt
     }
 
     ordered_state {
-        varchar entityId PK
-        bigint  version
-        varchar eventType
-        text    data
-        timestamp updatedAt
+        VARCHAR entityId PK
+        BIGINT version
+        VARCHAR eventType
+        TEXT data
+        TIMESTAMP updatedAt
     }
 
-    seed_data ||--o| naive_state   : "entityId (expected vs actual)"
-    seed_data ||--o| ordered_state : "entityId (expected vs actual)"
+    seed_data ||--o| naive_state : compares
+    seed_data ||--o| ordered_state : compares
 ```
 
 ---
@@ -300,6 +284,24 @@ erDiagram
   "orderedState": { "totalProcessed": 5000, "correct": 5000, "corrupted": 0,    "missing": 0, "corruptionRate": "0.00%" }
 }
 ```
+
+### 5. Proof from the Database
+
+The screenshot below shows the SQL query used to count records whose version is behind the final ground-truth version:
+
+```sql
+SELECT count(*) as naive_count
+FROM naive_state ns
+WHERE ns.version <> 5
+UNION
+SELECT count(*) as ordered_count
+FROM ordered_state ns
+WHERE ns.version <> 5;
+```
+
+![Naive and ordered state verification screenshot](<Screenshot 2026-08-15 at 9.17.03 PM.png>)
+
+The result shows **1,243 stale rows** in `naive_state` and **0 stale rows** in `ordered_state`. This proves that the unkeyed Kafka topic experiences out-of-order/back-pressure-style consumer writes, while keying by `entityId` keeps updates for the same entity ordered and prevents stale versions from being written.
 
 ---
 
