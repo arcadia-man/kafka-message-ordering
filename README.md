@@ -1,6 +1,13 @@
-# Kafka Consumer Deduplication Demo
+# Kafka Message Ordering and Consumer Deduplication
 
-A hands-on demo that shows **what goes wrong when Kafka messages have no key** and how **keyed partitioning fixes it**.
+This repository is a technical walkthrough of Kafka's per-key ordering guarantees and the stale database writes that can occur when concurrent consumers process unkeyed messages. It demonstrates both behaviors end to end and verifies the results against MySQL.
+
+## Concepts Demonstrated
+
+- How Kafka message keys map records to partitions and preserve per-entity order.
+- Why unkeyed messages processed concurrently can produce out-of-order writes.
+- How version-guarded upserts protect stored state from stale events.
+- How to verify consumer correctness by comparing database state with ground truth.
 
 ---
 
