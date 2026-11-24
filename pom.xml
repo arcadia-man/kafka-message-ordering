@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.example</groupId>
-    <artifactId>kafka-consumer-dedup</artifactId>
+    <artifactId>kafka-message-ordering</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>kafka-consumer-dedup</name>
+    <name>kafka-message-ordering</name>
     <description/>
     <url/>
     <licenses>

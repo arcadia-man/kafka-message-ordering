@@ -1,4 +1,4 @@
-# Kafka Message Ordering and Consumer Deduplication
+# Kafka Message Ordering Demo
 
 This repository is a technical walkthrough of Kafka's per-key ordering guarantees and the stale database writes that can occur when concurrent consumers process unkeyed messages. It demonstrates both behaviors end to end and verifies the results against MySQL.
 
@@ -315,7 +315,7 @@ The result shows **1,243 stale rows** in `naive_state` and **0 stale rows** in `
 ## Project Structure
 
 ```
-src/main/java/com/example/kafka_consumer_dedup/
+src/main/java/com/example/kafkamessageordering/
 ├── config/
 │   ├── KafkaConfig.java               # Producer + Consumer factories
 │   ├── KafkaTopicConfig.java          # Topic creation (naviceOrderSync, orderSync)

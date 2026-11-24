@@ -1,6 +1,6 @@
 spring:
   application:
-    name: kafka-consumer-dedup
+    name: kafka-message-ordering
 
   datasource:
     url: jdbc:mysql://localhost:3306/demo_db
@@ -32,7 +32,7 @@ x-kafka-templates:
   consumer-defaults: &consumer-defaults
     key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-    trusted-packages: "com.example.kafkaconsumerdedup.*"
+    trusted-packages: "com.example.kafkamessageordering.*"
 
 kafka:
   connections:
