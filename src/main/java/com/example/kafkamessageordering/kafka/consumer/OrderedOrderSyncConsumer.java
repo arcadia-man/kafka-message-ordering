@@ -13,7 +13,7 @@ import com.example.kafkamessageordering.model.OrderSyncMessage;
 import com.example.kafkamessageordering.repository.OrderedStateRepository;
 
 import lombok.extern.slf4j.Slf4j;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Ordered consumer — keyed by entityId.

@@ -1,8 +1,7 @@
 package com.example.kafkamessageordering.kafka.consumer;
 
-import org.springframework.boot.json.JsonParseException;
-
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public abstract class AbstractKafkaConsumer<T> {
     protected final ObjectMapper objectMapper;
@@ -17,7 +16,7 @@ public abstract class AbstractKafkaConsumer<T> {
         try {
             T payload = objectMapper.readValue(rawJson, targetType);
             process(consumerName, payload, key, partition, offset);
-        } catch (JsonParseException e) {
+        } catch (JsonProcessingException e) {
             System.err.printf("[%s] Deserialization error on Partition: %d | Offset: %d. Error: %s%n",
                     consumerName, partition, offset, e.getMessage());
         }
